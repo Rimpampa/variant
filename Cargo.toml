@@ -1,0 +1,7 @@
+[package]
+authors = ["Riccardo Ripanti <riccardo.ripanti01@gmail.com>"]
+name = "variant"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
