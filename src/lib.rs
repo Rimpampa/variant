@@ -62,7 +62,7 @@
 /// Being generic over the mutability of a reference is not possible yet so this crate provides
 /// a simple solution:
 /// ```
-/// # use variant::variants;
+/// # use variants::variants;
 /// 
 /// variants!([$] name: fn_ref, fn_mut => {
 ///     fn $name<T>(param: select!(fn_ref: {&T}, fn_mut: {&mut T})) {
@@ -90,7 +90,7 @@
 /// arithmetical operators so that they can be used directly with your type,
 /// this can be done easily by using variant aliases
 /// ```
-/// # use variant::variants;
+/// # use variants::variants;
 /// # use std::ops::*;
 /// struct Usize(usize);
 /// 
@@ -109,7 +109,7 @@
 /// 
 /// When there are not enough names as in the following snippet:
 /// ```compile_fail
-/// # use variant::variants;
+/// # use variants::variants;
 /// variants!([$] a | b: c => {});
 /// ```
 /// An error like this will be generated:
@@ -123,7 +123,7 @@
 /// 
 /// When, instead, there are more names than needed, no error will be generated, as demostrated in the following example:
 /// ```
-/// # use variant::variants;
+/// # use variants::variants;
 /// variants!([$] a | b: c | d | e => {});
 /// ```
 #[macro_export]
