@@ -83,12 +83,32 @@
 ///     /* mutate param */
 /// }
 /// ```
+/// 
+/// ## Using _or_ in `select!`
+/// 
+/// As explained in the syntax refernece, with `select!` more than one
+/// variant name can be mathed for the same piece of code.
+/// The following example uses this feature by adding a `fn_own` variant
+/// to the previous example:
+/// ```
+/// # use variants::variants;
+/// variants!([$] name: fn_own, fn_ref, fn_mut => {
+///     fn $name<T>(param: select!(fn_own: {T}, fn_ref: {&T}, fn_mut: {&mut T})) {
+///         // do something with param ...
+/// 
+///         select!(
+///             fn_mut | fn_ref: { /* use the reference */ },
+///             fn_own: { /* use the value */ },
+///         );
+///     }
+/// });
+/// ```
 ///
 /// ## Aliases
 ///
 /// Let's say you have a type that wraps a number and you have to overload the main
 /// arithmetical operators so that they can be used directly with your type,
-/// this can be done easily by using variant aliases
+/// this can be done easily by using variant aliases:
 /// ```
 /// # use variants::variants;
 /// # use std::ops::*;
@@ -143,13 +163,13 @@ macro_rules! variants {
             $(([$d d:tt] $($var)+) => {
                 // NOTE: here $d d is the same as $
                 macro_rules! select {
-                    // Same as: $var : { $($t:tt)* } $(, $($_:tt)|+ : { $($__:tt)* })* $(,)?
-                    $(($var : { $d d ($d d t:tt)* } $d d (, $d d ($d d _:tt)|+ : { $d d ($d d __:tt)* })* $d d (,)?) => {
+                    // Same as: $var $(| $_:tt)* : { $($t:tt)* } $(, $($__:tt)|+ : { $($___:tt)* })* $(,)?
+                    $(($var $d d (| $d d _:tt)* : { $d d ($d d t:tt)* } $d d (, $d d ($d d __:tt)|+ : { $d d ($d d ___:tt)* })* $d d (,)?) => {
                         // Same as: $($t)*
                         $d d ($d d t)*
                     };)+
-                    // Same as: _ : { $($t:tt)* } $(, $($_:tt)|+ : { $($__:tt)* })* $(,)?
-                    (_ : { $d d ($d d t:tt)* } $d d (, $d d ($d d _:tt)|+ : { $d d ($d d __:tt)* })* $d d (,)?) => {
+                    // Same as: _ $(| $_:tt)* : { $($t:tt)* } $(, $($__:tt)|+ : { $($___:tt)* })* $(,)?
+                    (_ $d d (| $d d _:tt)* : { $d d ($d d t:tt)* } $d d (, $d d ($d d __:tt)|+ : { $d d ($d d ___:tt)* })* $d d (,)?) => {
                         // Same as: $($t)*
                         $d d ($d d t)*
                     };
@@ -158,10 +178,10 @@ macro_rules! variants {
                         // Same as: select!{$($v $(| $va)* : { $($t)* }),*}
                         select!{$d d ($d d ($d d v)|+ : { $d d ($d d t)* }),*}
                     };
-                    // Same as: $($v:tt)|+ : { $($t:tt)* } $(, $($ov:tt)|+ : { $($ot:tt)* })* $(,)?
-                    ($d d ($d d v:tt)|+ : { $d d ($d d t:tt)* } $d d (, $d d ($d d ov:tt)|+ : { $d d ($d d ot:tt)* })* $d d (,)?) => {
-                        // Same as: select!{$($v : { $($t)* }),+ $(, $($ov)|+ : { $($ot)* }),*}
-                        select!{$d d ($d d v : { $d d ($d d t)* }),+ $d d (, $d d ($d d ov)|+ : { $d d ($d d ot)* }),*}
+                    // Same as: $_:tt $(| $v:tt)+ : { $($t:tt)* } $(, $($ov:tt)|+ : { $($ot:tt)* })* $(,)?
+                    ($d d _:tt $d d (| $d d v:tt)+ : { $d d ($d d t:tt)* } $d d (, $d d ($d d ov:tt)|+ : { $d d ($d d ot:tt)* })* $d d (,)?) => {
+                        // Same as: select!{$($v)|+ : { $($t)* }, $($($ov)|+ : { $($ot)* }),*}
+                        select!{$d d ($d d v)|+ : { $d d ($d d t)* }, $d d ($d d ($d d ov)|+ : { $d d ($d d ot)* }),*}
                     };
                     // Same as: $($var)|+ : $($t:tt)*
                     ($d d ($d d v:tt)|+ : $d d ($d d t:tt)*) => {
