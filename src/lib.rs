@@ -1,36 +1,34 @@
 //! This create provides the [`variants!`] macro, which can be used to create _variants_ of
 //! code snippets.
-//! 
+//!
 //! All the documentation of how to use that macro are found on the macro itself.
-//! 
+//!
 //! # Why use it?
-//! 
+//!
 //! Sometimes a lot of boilerplate needs to be written, and, be it because of some feature missing
 //! in Rust itself or on some project specific restrictions, it cannot be avoided.
-//! 
+//!
 //! Most of the times Rust programmers spend some time to write `macros!` to reduce the amount of duplicate code,
 //! but it doing so they expose themseleves to very criptic errors arising from macro expansion and worst of all
 //! they lose the help of the linter, because a macro cannot be checked until it's called.
-//! 
+//!
 //! The [`variants!`] marco can be used for many such cases with the advantage that the code can be seen directly
 //! by the linter and there won't be any macro expansion error (so long that the caller follows the syntax
 //! described)
 
-
-
 /// Creates variants of the same code
 ///
 /// The syntax is: `[$] <variable> or <variable> : <variant> or <alias> or <alias>, <variant>, ... => { <code> }`
-/// 
+///
 /// **Note** that the `[$]` at the start is only needed because of a restriction on macros.
 /// It won't be needed anymore once [RFC 3086](https://rust-lang.github.io/rfcs/3086-macro-metavar-expr.html)
 /// becomes stable.
 ///
 /// For each `<varaint>` a whole copy of the code will be created.
-/// 
+///
 /// Each variant can have as many aliases as wanted. Each alias will be matched with the corresponding
 /// `<variable>`.
-/// 
+///
 /// `<variable>` can be accessed inside `<code>` with `$<variable>` and it will expand to the corresponding
 /// alias for each variant.
 ///
@@ -56,18 +54,18 @@
 /// The special variant `_` can be used to match any variant
 ///
 /// # Example
-/// 
+///
 /// To give a basic example we can think of two function that do somewhat the same thing but one
 /// takes a shared reference and the other a mutable reference.
 /// Being generic over the mutability of a reference is not possible yet so this crate provides
 /// a simple solution:
 /// ```
 /// # use variants::variants;
-/// 
+///
 /// variants!([$] name: fn_ref, fn_mut => {
 ///     fn $name<T>(param: select!(fn_ref: {&T}, fn_mut: {&mut T})) {
 ///         // do something with param ...
-/// 
+///
 ///         select!{fn_mut: /* mutate param */};
 ///     }
 /// });
@@ -77,15 +75,15 @@
 /// fn fn_ref<T>(param: &T) {
 ///     // do something with param ...
 /// }
-/// 
+///
 /// fn fn_mut<T>(param: &mut T) {
 ///     // do something with param ...
 ///     /* mutate param */
 /// }
 /// ```
-/// 
+///
 /// ## Using _or_ in `select!`
-/// 
+///
 /// As explained in the syntax refernece, with `select!` more than one
 /// variant name can be mathed for the same piece of code.
 /// The following example uses this feature by adding a `fn_own` variant
@@ -95,7 +93,7 @@
 /// variants!([$] name: fn_own, fn_ref, fn_mut => {
 ///     fn $name<T>(param: select!(fn_own: {T}, fn_ref: {&T}, fn_mut: {&mut T})) {
 ///         // do something with param ...
-/// 
+///
 ///         select!(
 ///             fn_mut | fn_ref: { /* use the reference */ },
 ///             fn_own: { /* use the value */ },
@@ -113,11 +111,11 @@
 /// # use variants::variants;
 /// # use std::ops::*;
 /// struct Usize(usize);
-/// 
+///
 /// variants!([$] tr | op: Add | add, Sub | sub, Mul | mul, Div | div => {
 ///     impl $tr for Usize {
 ///         type Output = Self;
-/// 
+///
 ///         #[inline]
 ///         fn $op(self, rhs: Self) -> Self::Output {
 ///             Self(usize::$op(self.0, rhs.0))
@@ -126,7 +124,7 @@
 /// });
 /// ```
 /// **Note** that if `N` names are declared, there can't be less then `N` names for each variant
-/// 
+///
 /// When there are not enough names as in the following snippet:
 /// ```compile_fail
 /// # use variants::variants;
@@ -140,7 +138,7 @@
 /// 5 | variants!([$] a | b: c => {});
 ///   |                       ^ missing tokens in macro arguments
 /// ```
-/// 
+///
 /// When, instead, there are more names than needed, no error will be generated, as demostrated in the following example:
 /// ```
 /// # use variants::variants;
