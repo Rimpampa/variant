@@ -1,5 +1,5 @@
 [package]
 authors = ["Riccardo Ripanti <riccardo.ripanti01@gmail.com>"]
-name = "variants"
+name = "duplicate-decl"
 version = "0.1.0"
 edition = "2021"

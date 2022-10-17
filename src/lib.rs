@@ -1,4 +1,4 @@
-//! This create provides the [`variants!`] macro, which can be used to create _variants_ of
+//! This create provides the [`duplicate!`] macro, which can be used to create _duplicate_ of
 //! code snippets.
 //!
 //! All the documentation of how to use that macro are found on the macro itself.
@@ -12,11 +12,11 @@
 //! but it doing so they expose themseleves to very criptic errors arising from macro expansion and worst of all
 //! they lose the help of the linter, because a macro cannot be checked until it's called.
 //!
-//! The [`variants!`] marco can be used for many such cases with the advantage that the code can be seen directly
+//! The [`duplicate!`] marco can be used for many such cases with the advantage that the code can be seen directly
 //! by the linter and there won't be any macro expansion error (so long that the caller follows the syntax
 //! described)
 
-/// Creates variants of the same code
+/// Creates duplicate of the same code
 ///
 /// The syntax is: `[$] <variable> or <variable> : <variant> or <alias> or <alias>, <variant>, ... => { <code> }`
 ///
@@ -46,7 +46,7 @@
 ///
 /// Where `<name>` is the name of the variant to match (or of one of it's aliases),
 /// and `<code>` is some sequence of token that will remain after the macro expansion
-/// for the variants with the given names
+/// for the duplicate with the given names
 ///
 /// **Note** that not every variant must be present, and the same variant can
 /// appear more than once (only the first appearance will be evaluated)
@@ -60,9 +60,9 @@
 /// Being generic over the mutability of a reference is not possible yet so this crate provides
 /// a simple solution:
 /// ```
-/// # use variants::variants;
+/// # use duplicate_decl::duplicate;
 ///
-/// variants!([$] name: fn_ref, fn_mut => {
+/// duplicate!([$] name: fn_ref, fn_mut => {
 ///     fn $name<T>(param: select!(fn_ref: {&T}, fn_mut: {&mut T})) {
 ///         // do something with param ...
 ///
@@ -89,8 +89,8 @@
 /// The following example uses this feature by adding a `fn_own` variant
 /// to the previous example:
 /// ```
-/// # use variants::variants;
-/// variants!([$] name: fn_own, fn_ref, fn_mut => {
+/// # use duplicate_decl::duplicate;
+/// duplicate!([$] name: fn_own, fn_ref, fn_mut => {
 ///     fn $name<T>(param: select!(fn_own: {T}, fn_ref: {&T}, fn_mut: {&mut T})) {
 ///         // do something with param ...
 ///
@@ -108,11 +108,11 @@
 /// arithmetical operators so that they can be used directly with your type,
 /// this can be done easily by using variant aliases:
 /// ```
-/// # use variants::variants;
+/// # use duplicate_decl::duplicate;
 /// # use std::ops::*;
 /// struct Usize(usize);
 ///
-/// variants!([$] tr | op: Add | add, Sub | sub, Mul | mul, Div | div => {
+/// duplicate!([$] tr | op: Add | add, Sub | sub, Mul | mul, Div | div => {
 ///     impl $tr for Usize {
 ///         type Output = Self;
 ///
@@ -127,25 +127,25 @@
 ///
 /// When there are not enough names as in the following snippet:
 /// ```compile_fail
-/// # use variants::variants;
-/// variants!([$] a | b: c => {});
+/// # use duplicate_decl::duplicate;
+/// duplicate!([$] a | b: c => {});
 /// ```
 /// An error like this will be generated:
 /// ```plain
 /// error: unexpected end of macro invocation
 ///  --> src\lib.rs:111:23
 ///   |
-/// 5 | variants!([$] a | b: c => {});
+/// 5 | duplicate!([$] a | b: c => {});
 ///   |                       ^ missing tokens in macro arguments
 /// ```
 ///
 /// When, instead, there are more names than needed, no error will be generated, as demostrated in the following example:
 /// ```
-/// # use variants::variants;
-/// variants!([$] a | b: c | d | e => {});
+/// # use duplicate_decl::duplicate;
+/// duplicate!([$] a | b: c | d | e => {});
 /// ```
 #[macro_export]
-macro_rules! variants {
+macro_rules! duplicate {
     // NOTE: what is $d?
     // $d must be the dollar sign (`$`) and it's needed to generate macros that take parameters
     // because the dollar sign cannot be used inside a macro definition
