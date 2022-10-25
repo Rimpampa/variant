@@ -27,7 +27,7 @@
 /// It won't be needed anymore once [RFC 3086](https://rust-lang.github.io/rfcs/3086-macro-metavar-expr.html)
 /// becomes stable.
 ///
-/// For each `<substitution group>` a whole copy of the `<code>` will be created  where each occurrence of `$($var)*`,
+/// For each `<substitution group>` a whole copy of the `<code>` will be created  where each occurrence of `$var`,
 /// where `var` is one of the is `<substituition variables>`, is replaced with the contents of the respective
 /// `<substitution>`.
 ///
@@ -60,7 +60,7 @@
 /// ```
 /// # use duplicate_decl::duplicate;
 /// duplicate!([$] [name]; [fn_ref]; [fn_mut]; {
-///     fn $($name)* <T>(param: select!([fn_ref]: {&T}, [fn_mut]: {&mut T})) {
+///     fn $name<T>(param: select!([fn_ref]: {&T}, [fn_mut]: {&mut T})) {
 ///         // do something with param ...
 ///
 ///         select!{[fn_mut]: /* mutate param */};
@@ -88,7 +88,7 @@
 /// ```
 /// # use duplicate_decl::duplicate;
 /// duplicate!([$] [name]; [fn_own]; [fn_ref]; [fn_mut]; {
-///     fn $($name)*<T>(param: select!([fn_own]: {T}, [fn_ref]: {&T}, [fn_mut]: {&mut T})) {
+///     fn $name<T>(param: select!([fn_own]: {T}, [fn_ref]: {&T}, [fn_mut]: {&mut T})) {
 ///         // do something with param ...
 ///
 ///         select!(
@@ -99,7 +99,7 @@
 /// });
 /// ```
 ///
-/// ## Aliases
+/// ## Using multiple substitution variables
 ///
 /// Let's say you have a type that wraps a number and you have to overload the main
 /// arithmetical operators so that they can be used directly with your type,
@@ -110,12 +110,12 @@
 /// struct Usize(usize);
 ///
 /// duplicate!([$] [tr][op]; [Add][add]; [Sub][sub]; [Mul][mul]; [Div][div]; {
-///     impl $($tr)* for Usize {
+///     impl $tr for Usize {
 ///         type Output = Self;
 ///
 ///         #[inline]
-///         fn $($op)*(self, rhs: Self) -> Self::Output {
-///             Self(usize::$($op)*(self.0, rhs.0))
+///         fn $op(self, rhs: Self) -> Self::Output {
+///             Self(usize::$op(self.0, rhs.0))
 ///         }
 ///     }
 /// });
@@ -135,13 +135,14 @@
 /// ```
 /// **Note** that the `[e]` won't be considered
 /// 
-/// ## Using arbitrary tokens
-/// 
-/// The first example could be written like this:
+/// With this mechanism the first example could be written like this:
 /// ```
 /// # use duplicate_decl::duplicate;
-/// duplicate!([$] [name][ref]; [fn_ref][&]; [fn_mut][&mut]; {
-///     fn $($name)* <T>(param: $($ref)* T) {
+/// type Ref<'a, T> = &'a T;
+/// type RefMut<'a, T> = &'a mut T;
+/// 
+/// duplicate!([$] [name][ref_type]; [fn_ref][Ref]; [fn_mut][RefMut]; {
+///     fn $name<T>(param: $ref_type<'_, T>) {
 ///         // do something with param ...
 ///
 ///         select!{[fn_mut]: /* mutate param */};
@@ -153,7 +154,7 @@ macro_rules! duplicate {
     // NOTE: what is $d?
     // $d must be the dollar sign (`$`) and it's needed to generate macros that take parameters
     // because the dollar sign cannot be used inside a macro definition
-    ([$d:tt] $([$name:ident])+; $( $([$($sub:tt)*])+; )* {$($i:tt)*}) => {
+    ([$d:tt] $([$name:ident])+; $( $([$sub:tt])+; )* {$($i:tt)*}) => {
         // NOTE: here $d is the same as $
         macro_rules! variant {
             // NOTE: what is $d d?
@@ -162,45 +163,45 @@ macro_rules! duplicate {
             // like for the main macro a dollar sign has to be passed in order to make sub-macros
             // that take parameters, but in defining this dollar-sign-meta-var the main
             // one ($d) as to be used, this $d d is the inner macro `$`
-            $(([$d d:tt] $([$($sub)*])+) => {
+            $(([$d d:tt] $([$sub])+) => {
                 // NOTE: here $d d is the same as $
                 macro_rules! select {
                     // Same as:
-                    // [$($sub)*] $(| [$($_:tt)*])* : { $($t:tt)* }
-                    // $(, $([$($__:tt)*])|+ : { $($___:tt)* })* $(,)?
+                    // [$sub] $(| [$_:tt])* : { $($t:tt)* }
+                    // $(, $([$__:tt])|+ : { $($___:tt)* })* $(,)?
                     $((
-                        [$($sub)*] $d d (| [$d d ($d d _:tt)*])* : { $d d ($d d t:tt)* }
-                        $d d (, $d d ([$d d ($d d __:tt)*])|+ : { $d d ($d d ___:tt)* })* $d d (,)?
+                        [$sub] $d d (| [$d d _:tt])* : { $d d ($d d t:tt)* }
+                        $d d (, $d d ([$d d __:tt])|+ : { $d d ($d d ___:tt)* })* $d d (,)?
                     ) => {
                         // Same as: $($t)*
                         $d d ($d d t)*
                     };)+
-                    // Same as: _ $(| [$($_:tt)*])* : { $($t:tt)* } $(, $([$($__:tt)*])|+ : { $($___:tt)* })* $(,)?
-                    (_ $d d (| [$d d ($d d _:tt)*])* : { $d d ($d d t:tt)* } $d d (, $d d ([$d d ($d d __:tt)*])|+ : { $d d ($d d ___:tt)* })* $d d (,)?) => {
+                    // Same as: _ $(| [$_:tt])* : { $($t:tt)* } $(, $([$__:tt])|+ : { $($___:tt)* })* $(,)?
+                    (_ $d d (| [$d d _:tt])* : { $d d ($d d t:tt)* } $d d (, $d d ([$d d __:tt])|+ : { $d d ($d d ___:tt)* })* $d d (,)?) => {
                         // Same as: $($t)*
                         $d d ($d d t)*
                     };
                     // Same as: [$($_:tt)*] : { $($__:tt)* } $(, $([$($v:tt)*])|+ : { $($t:tt)* })* $(,)?
-                    ([$d d ($d d _:tt)*] : { $d d ($d d __:tt)* } $d d (, $d d ([$d d ($d d v:tt)*])|+ : { $d d ($d d t:tt)* })* $d d (,)?) => {
-                        // Same as: select!{$($([$($v)*])|+ : { $($t)* }),*}
-                        select!{$d d ($d d ([$d d ($d d v)*])|+ : { $d d ($d d t)* }),*}
+                    ([$d d _:tt] : { $d d ($d d __:tt)* } $d d (, $d d ([$d d v:tt])|+ : { $d d ($d d t:tt)* })* $d d (,)?) => {
+                        // Same as: select!{$($([$v])|+ : { $($t)* }),*}
+                        select!{$d d ($d d ([$d d v])|+ : { $d d ($d d t)* }),*}
                     };
                     // Same as: [$($_:tt)*] $(| [$($v:tt)*])+ : { $($t:tt)* } $(, $([$($ov:tt)*])|+ : { $($ot:tt)* })* $(,)?
-                    ([$d d ($d d _:tt)*] $d d (| [$d d ($d d v:tt)*])+ : { $d d ($d d t:tt)* } $d d (, $d d ([$d d ($d d ov:tt)*])|+ : { $d d ($d d ot:tt)* })* $d d (,)?) => {
-                        // Same as: select!{$([$($v)*])|+ : { $($t)* }, $($([$($ov)*])|+ : { $($ot)* }),*}
-                        select!{$d d ([$d d ($d d v)*])|+ : { $d d ($d d t)* }, $d d ($d d ([$d d ($d d ov)*])|+ : { $d d ($d d ot)* }),*}
+                    ([$d d _:tt] $d d (| [$d d v:tt])+ : { $d d ($d d t:tt)* } $d d (, $d d ([$d d ov:tt])|+ : { $d d ($d d ot:tt)* })* $d d (,)?) => {
+                        // Same as: select!{$([$v])|+ : { $($t)* }, $($([$ov])|+ : { $($ot)* }),*}
+                        select!{$d d ([$d d v])|+ : { $d d ($d d t)* }, $d d ($d d ([$d d ov])|+ : { $d d ($d d ot)* }),*}
                     };
                     // Same as: $([$($v:tt)*])|+ : $($t:tt)*
-                    ($d d ([$d d ($d d v:tt)*])|+ : $d d ($d d t:tt)*) => {
-                        // Same as: select!{$([$($v)*])|+ : { $($t)* }}
-                        select!{$d d ([$d d ($d d v)*])|+ : { $d d ($d d t)* }}
+                    ($d d ([$d d v:tt])|+ : $d d ($d d t:tt)*) => {
+                        // Same as: select!{$([$v])|+ : { $($t)* }}
+                        select!{$d d ([$d d v])|+ : { $d d ($d d t)* }}
                     };
                     () => {};
                 }
-                variant!{$([$($sub)*])+}
+                variant!{$([$sub])+}
             };)*
-            ($([$d ($d $name:tt)*])+ $d ($d _:tt)*) => { $($i)* };
+            ($([$d $name:tt])+ $d ($d _:tt)*) => { $($i)* };
         }
-        $(variant!{[$d] $([$($sub)*])+})*
+        $(variant!{[$d] $([$sub])+})*
     };
 }
