@@ -185,6 +185,87 @@
 ///    ```ignore
 ///    macro_rules! remove_parens { (($($t:tt)*)) => {$($t)*} }
 ///    ```
+///
+/// # Nesting
+///
+/// Imagine we have a trait that serves the purpose of checking whether
+/// the absolute value of two numbers is the same:
+/// ```
+/// trait AbsEq: PartialEq {
+///     fn abs_eq(self, rhs: Self) -> bool;
+/// }
+/// ```
+///
+/// We want to implement this for the six integer types [`u8`], [`u16`], [`u32`],
+/// [`i8`], [`i16`], and [`i32`].
+/// For the first three types, which are all unsigned, the implementation of this trait
+/// should return the result of the base equality operator as they can't be negative.
+/// However, for the remaining, signed types their implementations requires to take
+/// the absolute value before doing the comparison:
+/// ```
+/// # use variants::variants;
+/// # use std::convert::identity;
+/// # trait AbsEq {
+/// #     fn abs_eq(self, rhs: Self) -> bool;
+/// # }
+/// variants!(
+///     #[dollar($)]
+///     #[variant(u8, identity)]
+///     #[variant(u16, identity)]
+///     #[variant(u32, identity)]
+///     #[variant(i8, (Self::abs))]
+///     #[variant(i16, (Self::abs))]
+///     #[variant(i32, (Self::abs))]
+///     macro types(ty, map) {
+///         impl AbsEq for $ty {
+///             fn abs_eq(self, rhs: Self) -> bool {
+///                 $map(self) == $map(rhs)
+///             }
+///         }
+///     }
+/// );
+/// # assert!(42u8.abs_eq(42u8));
+/// # assert!(42u16.abs_eq(42u16));
+/// # assert!(42u32.abs_eq(42u32));
+/// # assert!(42i8.abs_eq(-42i8));
+/// # assert!(42i16.abs_eq(-42i16));
+/// # assert!(42i32.abs_eq(-42i32));
+/// ```
+/// Notice how the variants can be groped based on the implementation:
+/// one for the unsigned types and one for the signed ones.
+/// This can be done by nesting a call to [`variants!`]:
+/// ```
+/// # use variants::variants;
+/// # use std::convert::identity;
+/// # trait AbsEq {
+/// #     fn abs_eq(self, rhs: Self) -> bool;
+/// # }
+/// variants!(
+///     #[dollar($ as d)]
+///     #[variant((u8, u16, u32), identity)]
+///     #[variant((i8, i16, i32), (Self::abs))]
+///     macro abs_eq(types, map) {
+///         variants!{
+///             #[dollar($d)]
+///             #[variants $types]
+///             macro inner(ty) {
+///                 impl AbsEq for $d ty {
+///                     fn abs_eq(self, rhs: Self) -> bool {
+///                         $map(self) == $map(rhs)
+///                     }
+///                 }
+///             }
+///         }
+///     }
+/// );
+///
+/// assert!(42u8.abs_eq(42u8));
+/// assert!(42u16.abs_eq(42u16));
+/// assert!(42u32.abs_eq(42u32));
+/// assert!(42i8.abs_eq(-42i8));
+/// assert!(42i16.abs_eq(-42i16));
+/// assert!(42i32.abs_eq(-42i32));
+/// ```
 #[macro_export]
 macro_rules! variants {
     // NOTE: what is $d?
