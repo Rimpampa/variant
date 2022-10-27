@@ -12,7 +12,19 @@
 /// variants!(
 ///     #[dollar($)]
 ///     #[variant(<substitution>, ...)]
+///     #[variant(<substitution>, ...)]
+///     ...
 ///     macro <macro>(<param>, ...) { <code> }
+/// )
+/// ```
+///
+/// There is also a special syntax for when there is only one `<param>` which declares all the variants
+/// in the same "attribute":
+/// ```plain
+/// variants!(
+///     #[dollar($)]
+///     #[variants(<substitution>, ...)]
+///     macro <macro>(<param>) { <code> }
 /// )
 /// ```
 ///
@@ -234,4 +246,17 @@ macro_rules! variants {
         macro $macro:ident($($param:ident),+)
         {$($i:tt)*}
     ) => {};
+    (
+        #[dollar($d:tt $(as $dollar:ident)?)]
+        #[variants($($sub:tt),+)]
+        macro $macro:ident($param:ident)
+        {$($i:tt)*}
+    ) => {
+        $crate::variants!{
+            #[dollar($d $(as $dollar)?)]
+            $(#[variant($sub)])+
+            macro $macro($param)
+            {$($i)*}
+        }
+    };
 }
