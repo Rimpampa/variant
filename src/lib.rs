@@ -1,168 +1,210 @@
 //! This create provides the [`variants!`] macro, which can be used to create _variants_ of
 //! code snippets.
 //!
-//! All the documentation of how to use that macro are found on the macro itself.
-//!
-//! # Why use it?
-//!
-//! Sometimes a lot of boilerplate needs to be written, and, be it because of some feature missing
-//! in Rust itself or on some project specific restrictions, it cannot be avoided.
-//!
-//! Most of the times Rust programmers spend some time to write `macros!` to reduce the amount of duplicate code,
-//! but it doing so they expose themseleves to very criptic errors arising from macro expansion and worst of all
-//! they lose the help of the linter, because a macro cannot be checked until it's called.
-//!
-//! The [`variants!`] marco can be used for many such cases with the advantage that the code can be seen directly
-//! by the linter and there won't be any macro expansion error (so long that the caller follows the syntax
-//! described)
+//! All the documentation of how to use that macro are found on the [macro itself](variants!).
 
 /// Creates variants of the same code
 ///
-/// The syntax is: `[$] <variable> or <variable> : <variant> or <alias> or <alias>, <variant>, ... => { <code> }`
+/// # Syntax
 ///
-/// **Note** that the `[$]` at the start is only needed because of a restriction on macros.
-/// It won't be needed anymore once [RFC 3086](https://rust-lang.github.io/rfcs/3086-macro-metavar-expr.html)
-/// becomes stable.
+/// The syntax is similar to the one of a function or of a macro 2.0:
+/// ```plain
+/// variants!(
+///     #[dollar($)]
+///     #[variant(<substitution>, ...)]
+///     macro <macro>(<param>, ...) { <code> }
+/// )
+/// ```
 ///
-/// For each `<varaint>` a whole copy of the code will be created.
+/// For each `#[variant]` a whole copy of the `<code>` will be created  where each occurrence of `$param`,
+/// is replaced with the contents of the respective `<substitution>`.
+/// `<macro>` will be the name of the generated macro, not really useful but it allows nesting calls to [`variants!`].
 ///
-/// Each variant can have as many aliases as wanted. Each alias will be matched with the corresponding
-/// `<variable>`.
+/// If `N` parameters are declared, there can't be less then `N` substitutions for each variant
 ///
-/// `<variable>` can be accessed inside `<code>` with `$<variable>` and it will expand to the corresponding
-/// alias for each variant.
+/// An error will be generated when there are not enough substitutions as in the following snippet:
+/// ```compile_fail
+/// # use variants::variants;
+/// variants!(
+///     #[dollar($)]
+///     #[variant(c)]
+///     macro test(a, b) {}
+/// );
+/// ```
+/// This will produce an error similar to this one:
+/// ```plain
+/// error: unexpected end of macro invocation
+///    --> src\lib.rs:286:16
+///     |
+/// 234 |         macro_rules! $macro {
+///     |         ------------------- when calling this macro
+/// ...
+/// 286 |     #[variant(c)]
+///     |                ^ missing tokens in macro arguments
+/// ```
 ///
-/// **Note** that the generated code will be expanded inside a macro definition,
-/// so the code can't contain dollar signes that are not meta-variables.
-/// In fact the `<variable>`s are actually macro meta-variables
+/// When, instead, there are more substitutions than needed, no error will be generated and the extra ones
+/// will just be ignored, as demostrated in the following example:
+/// ```
+/// # use variants::variants;
+/// variants!(
+///     #[dollar($)]
+///     #[variant(c, d, e)]
+///     macro test(a, b) {}
+/// );
+/// ```
 ///
 /// # `select!`
 ///
-/// Select is a utility macro which can be used to chose which code to execute for which variant
+/// Select is a utility macro which can be used to choose which code to execute for which variant
 ///
-/// The syntax is `<name> | <name> | ... : { <code> }, <name> : { <code> }, ...`
+/// The syntax is `select!(<sub> | <sub> | ... : { <code> }, <sub> : { <code> }, ...)`
 ///
-/// Alternatively `<name> | <name> | ... : <code>` or simply `<name> : <code>`
+/// Alternatively `select!(<sub> | <sub> | ... : <code>)` or simply `select!(<sub> : <code>)`
 ///
-/// Where `<name>` is the name of the variant to match (or of one of it's aliases),
-/// and `<code>` is some sequence of token that will remain after the macro expansion
-/// for the variants with the given names
+/// Where `<sub>` a substitution to match, and `<code>` is some sequence of token that will remain
+/// after the macro expansion for the copy with the _selected_ substitution
 ///
-/// **Note** that not every variant must be present, and the same variant can
-/// appear more than once (only the first appearance will be evaluated)
+/// Mot every substitution must be present, in variants that don't match anything it expands to nothing,
+/// and the same substitution can appear more than once (only the first appearance will be evaluated).
+/// The special substitution `_` can be used to match any variant.
+/// If a substitution that doesn't exist in any variant is added (that is not `_`), the macro will
+/// generate a compile time error.
 ///
-/// The special variant `_` can be used to match any variant
+/// ## What's the deal with the dollar?
+///
+/// The generated code will be expanded inside a macro definition, so that the `<param>`s can be
+/// _macro meta-variables_.
+///
+/// The `#[dollar($)]` at the start is needed because of a restriction on macros for which
+/// inside a macro body the literal token `$` can't appear, but using a dollar sign is required
+/// to declar a macro inside a macro.
+/// It won't be needed anymore once [RFC 3086](https://rust-lang.github.io/rfcs/3086-macro-metavar-expr.html)
+/// becomes stable.
+///
+/// If there is the need to use the dollar sign (for example when nesting calls to [`variants!`])
+/// `#[dollar($ as <name>)]` can be used.
+/// By doing so, every occurrence of `$name` will be replaced with the dollar sign.
+/// An example of how to use it it's shown later.
 ///
 /// # Example
 ///
-/// To give a basic example we can think of two function that do somewhat the same thing but one
-/// takes a shared reference and the other a mutable reference.
-/// Being generic over the mutability of a reference is not possible yet so this crate provides
-/// a simple solution:
-/// ```
-/// # use variants::variants;
-///
-/// variants!([$] name: fn_ref, fn_mut => {
-///     fn $name<T>(param: select!(fn_ref: {&T}, fn_mut: {&mut T})) {
-///         // do something with param ...
-///
-///         select!{fn_mut: /* mutate param */};
-///     }
-/// });
-/// ```
-/// This will expand to semthing like this:
-/// ```ignore
-/// fn fn_ref<T>(param: &T) {
-///     // do something with param ...
-/// }
-///
-/// fn fn_mut<T>(param: &mut T) {
-///     // do something with param ...
-///     /* mutate param */
-/// }
-/// ```
-///
-/// ## Using _or_ in `select!`
-///
-/// As explained in the syntax refernece, with `select!` more than one
-/// variant name can be mathed for the same piece of code.
-/// The following example uses this feature by adding a `fn_own` variant
-/// to the previous example:
-/// ```
-/// # use variants::variants;
-/// variants!([$] name: fn_own, fn_ref, fn_mut => {
-///     fn $name<T>(param: select!(fn_own: {T}, fn_ref: {&T}, fn_mut: {&mut T})) {
-///         // do something with param ...
-///
-///         select!(
-///             fn_mut | fn_ref: { /* use the reference */ },
-///             fn_own: { /* use the value */ },
-///         );
-///     }
-/// });
-/// ```
-///
-/// ## Aliases
-///
-/// Let's say you have a type that wraps a number and you have to overload the main
-/// arithmetical operators so that they can be used directly with your type,
-/// this can be done easily by using variant aliases:
+/// Let's say you have a type that wraps a number and you have to overload the
+/// main mathematical operators so that they can be used directly with your type,
+/// this can be done easily by using substitution groups of two elements:
 /// ```
 /// # use variants::variants;
 /// # use std::ops::*;
+/// # #[derive(PartialEq, Debug)]
 /// struct Usize(usize);
 ///
-/// variants!([$] tr | op: Add | add, Sub | sub, Mul | mul, Div | div => {
-///     impl $tr for Usize {
-///         type Output = Self;
+/// variants!(
+///     #[dollar($)]
+///     #[variant(Add, add)]
+///     #[variant(Sub, sub)]
+///     #[variant(Mul, mul)]
+///     #[variant(Div, div)]
+///     macro operators(op_trait, op_fn) {
+///         impl $op_trait for Usize {
+///             type Output = Self;
 ///
-///         #[inline]
-///         fn $op(self, rhs: Self) -> Self::Output {
-///             Self(usize::$op(self.0, rhs.0))
+///             #[inline]
+///             fn $op_fn(self, rhs: Self) -> Self::Output {
+///                 Self(usize::$op_fn(self.0, rhs.0))
+///             }
 ///         }
 ///     }
-/// });
-/// ```
-/// **Note** that if `N` names are declared, there can't be less then `N` names for each variant
+/// );
 ///
-/// When there are not enough names as in the following snippet:
-/// ```compile_fail
-/// # use variants::variants;
-/// variants!([$] a | b: c => {});
-/// ```
-/// An error like this will be generated:
-/// ```plain
-/// error: unexpected end of macro invocation
-///  --> src\lib.rs:111:23
-///   |
-/// 5 | variants!([$] a | b: c => {});
-///   |                       ^ missing tokens in macro arguments
+/// assert_eq!(Usize(1) + Usize(1), Usize(2));
+/// assert_eq!(Usize(1) - Usize(1), Usize(0));
+/// assert_eq!(Usize(2) * Usize(3), Usize(6));
+/// assert_eq!(Usize(6) / Usize(2), Usize(3));
 /// ```
 ///
-/// When, instead, there are more names than needed, no error will be generated, as demostrated in the following example:
+/// # Using `select!`
+///
+/// The following example shows a solution to something that isn't possible in Rust (yet):
+/// being generic over the mutability of a reference.
+/// Just being generic over that won't help much, be by using `select!` it's possible to
+/// change the behaviour based on the mutability of the reference.
 /// ```
 /// # use variants::variants;
-/// variants!([$] a | b: c | d | e => {});
+/// variants!(
+///     #[dollar($)]
+///     #[variant(add_one_ref, (&usize))]
+///     #[variant(add_one_mut, (&mut usize))]
+///     macro refmut(name, ty) {
+///         fn $name(param: $ty) -> usize {
+///             let out = *param + 1;
+///             // do something with param ...
+///             select!{add_one_mut: *param += 1};
+///             out
+///         }
+///     }
+/// );
+///
+/// let mut test = 0;
+/// assert_eq!(add_one_ref(&test), 1);
+/// assert_eq!(test, 0);
+/// assert_eq!(add_one_mut(&mut test), 1);
+/// assert_eq!(test, 1);
 /// ```
+/// This will expand to semthing like this:
+/// ```ignore
+/// fn add_one_ref<T>(param: &T) {
+///     let out = *param + 1;
+///     out
+/// }
+///
+/// fn add_one_mut<T>(param: &mut T) {
+///     let out = *param + 1;
+///     *param += 1;
+///     out
+/// }
+/// ```
+///
+/// ### Note
+///
+/// Wrapping the type in parenthesis is needed as a substitution must be a single token-tree
+/// but this will produce the warning "unnecessary parentheses around type" so if this
+/// is not wanted two solutions can be used:
+/// 1) Add `#[allow(unused_parens)]` before the `fn $name`
+/// 2) Use a `remove_parens!` macro, which simply removes the parenthesis;\
+///    Such a macro can be written like this:
+///    ```ignore
+///    macro_rules! remove_parens { (($($t:tt)*)) => {$($t)*} }
+///    ```
 #[macro_export]
 macro_rules! variants {
     // NOTE: what is $d?
     // $d must be the dollar sign (`$`) and it's needed to generate macros that take parameters
     // because the dollar sign cannot be used inside a macro definition
-    ([$d:tt] $($name:tt)|+ : $( $($var:tt)|+ ),* => {$($i:tt)*}) => {
+    (
+        #[dollar($d:tt $(as $dollar:ident)?)]
+        $(#[variant($($sub:tt),+)])+
+        macro $macro:ident($($param:ident),+)
+        {$($i:tt)*}
+    ) => {
         // NOTE: here $d is the same as $
-        macro_rules! variant {
+        macro_rules! $macro {
+            // Check that the tt appears in at least one of the #[variant(...)] attributes
+            $($((@[$sub]filter $d ($d t:tt)*) => {$d ($d t)*};)+)+
+            (@[$d t:tt]filter $d ($d _:tt)*) => {
+                ::core::compile_error!(concat!("Unknow substutition `", stringify!($d t), "`"));
+            };
+
             // NOTE: what is $d d?
             // $d d, like for $d, is the dollar sign.
             // This has to be done to achive two-level-deep nesting of macros with parameters:
             // like for the main macro a dollar sign has to be passed in order to make sub-macros
             // that take parameters, but in defining this dollar-sign-meta-var the main
             // one ($d) as to be used, this $d d is the inner macro `$`
-            $(([$d d:tt] $($var)+) => {
+            $(([$d d:tt] $($sub)+) => {
                 // NOTE: here $d d is the same as $
                 macro_rules! select {
-                    // Same as: $var $(| $_:tt)* : { $($t:tt)* } $(, $($__:tt)|+ : { $($___:tt)* })* $(,)?
-                    $(($var $d d (| $d d _:tt)* : { $d d ($d d t:tt)* } $d d (, $d d ($d d __:tt)|+ : { $d d ($d d ___:tt)* })* $d d (,)?) => {
+                    // Same as: $sub $(| $_:tt)* : { $($t:tt)* } $(, $($__:tt)|+ : { $($___:tt)* })* $(,)?
+                    $(($sub $d d (| $d d _:tt)* : { $d d ($d d t:tt)* } $d d (, $d d ($d d __:tt)|+ : { $d d ($d d ___:tt)* })* $d d (,)?) => {
                         // Same as: $($t)*
                         $d d ($d d t)*
                     };)+
@@ -171,27 +213,32 @@ macro_rules! variants {
                         // Same as: $($t)*
                         $d d ($d d t)*
                     };
-                    // Same as: $_:tt : { $($__:tt)* } $(, $($v:tt)|+ : { $($t:tt)* })* $(,)?
-                    ($d d _:tt : { $d d ($d d __:tt)* } $d d (, $d d ($d d v:tt)|+ : { $d d ($d d t:tt)* })* $d d (,)?) => {
-                        // Same as: select!{$($v $(| $va)* : { $($t)* }),*}
-                        select!{$d d ($d d ($d d v)|+ : { $d d ($d d t)* }),*}
+                    // Same as: $sv:tt : { $($__:tt)* } $(, $($v:tt)|+ : { $($t:tt)* })* $(,)?
+                    ($d d sv:tt : { $d d ($d d __:tt)* } $d d (, $d d ($d d v:tt)|+ : { $d d ($d d t:tt)* })* $d d (,)?) => {
+                        // Same as: $macro!{@[$sv]filter select!{$($v $(| $va)* : { $($t)* }),*}}
+                        $macro!{@[$d d sv]filter select!{$d d ($d d ($d d v)|+ : { $d d ($d d t)* }),*}}
                     };
                     // Same as: $_:tt $(| $v:tt)+ : { $($t:tt)* } $(, $($ov:tt)|+ : { $($ot:tt)* })* $(,)?
                     ($d d _:tt $d d (| $d d v:tt)+ : { $d d ($d d t:tt)* } $d d (, $d d ($d d ov:tt)|+ : { $d d ($d d ot:tt)* })* $d d (,)?) => {
                         // Same as: select!{$($v)|+ : { $($t)* }, $($($ov)|+ : { $($ot)* }),*}
                         select!{$d d ($d d v)|+ : { $d d ($d d t)* }, $d d ($d d ($d d ov)|+ : { $d d ($d d ot)* }),*}
                     };
-                    // Same as: $($var)|+ : $($t:tt)*
+                    // Same as: $($v)|+ : $($t:tt)*
                     ($d d ($d d v:tt)|+ : $d d ($d d t:tt)*) => {
                         // Same as: select!{$($v)|+ : { $($t)* }}
                         select!{$d d ($d d v)|+ : { $d d ($d d t)* }}
                     };
                     () => {};
                 }
-                variant!{$($var)|+};
+                $macro!{@[$d d]expand $($sub)+}
             };)*
-            ($($d $name:tt)|+ $d ($d _:tt)*) => { $($i)* };
+            // NOTE: why not doing everything inside the first matcher?
+            // That's because if that was done an extra variable called $d will be avaiable inside the given code
+            // which is not wanted, as the only "doller-meta-variable" should be $dollar
+            (@$([$d $dollar:tt])?expand $($d $param:tt)+ $d ($d _:tt)*) => { $($i)* };
+            // NOTE: this catches the cases when $dollar is not defined, as the [$] is always set
+            (@[$d _:tt]expand $($d $param:tt)+ $d ($d __:tt)*) => { $($i)* };
         }
-        $(variant!{[$d] $($var)+})*
+        $($macro!{[$d] $($sub)+})*
     };
 }
