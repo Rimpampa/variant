@@ -54,18 +54,16 @@
 /// );
 /// ```
 ///
-/// # `select!`
+/// The macro defined with the given name can be used to choose which code to execute for which variant
 ///
-/// Select is a utility macro which can be used to choose which code to execute for which variant
+/// The syntax is `<macro>!(<sub> | <sub> | ... : { <code> }, <sub> : { <code> }, ...)`
 ///
-/// The syntax is `select!(<sub> | <sub> | ... : { <code> }, <sub> : { <code> }, ...)`
-///
-/// Alternatively `select!(<sub> | <sub> | ... : <code>)` or simply `select!(<sub> : <code>)`
+/// Alternatively `<macro>!(<sub> | <sub> | ... : <code>)` or simply `<macro>!(<sub> : <code>)`
 ///
 /// Where `<sub>` a substitution to match, and `<code>` is some sequence of token that will remain
-/// after the macro expansion for the copy with the _selected_ substitution
+/// after the macro expansion for the copy with the selected substitution
 ///
-/// Mot every substitution must be present, in variants that don't match anything it expands to nothing,
+/// Not every substitution must be present, in variants that don't match anything it expands to nothing,
 /// and the same substitution can appear more than once (only the first appearance will be evaluated).
 /// The special substitution `_` can be used to match any variant.
 /// If a substitution that doesn't exist in any variant is added (that is not `_`), the macro will
@@ -122,12 +120,12 @@
 /// assert_eq!(Usize(6) / Usize(2), Usize(3));
 /// ```
 ///
-/// # Using `select!`
+/// # Using the generated macro
 ///
 /// The following example shows a solution to something that isn't possible in Rust (yet):
 /// being generic over the mutability of a reference.
-/// Just being generic over that won't help much, be by using `select!` it's possible to
-/// change the behaviour based on the mutability of the reference.
+/// Just being generic over that won't help much, be by using the generated macro it's possible
+/// to change the behaviour based on the mutability of the reference.
 /// ```
 /// # use variants::variants;
 /// variants!(
@@ -138,7 +136,7 @@
 ///         fn $name(param: $ty) -> usize {
 ///             let out = *param + 1;
 ///             // do something with param ...
-///             select!{add_one_mut: *param += 1};
+///             refmut!{add_one_mut: *param += 1};
 ///             out
 ///         }
 ///     }
@@ -182,56 +180,39 @@ macro_rules! variants {
     // because the dollar sign cannot be used inside a macro definition
     (
         #[dollar($d:tt $(as $dollar:ident)?)]
-        $(#[variant($($sub:tt),+)])+
+        #[variant($($sub:tt),+)]
+        $(#[variant($($other_sub:tt),+)])*
         macro $macro:ident($($param:ident),+)
         {$($i:tt)*}
     ) => {
         // NOTE: here $d is the same as $
         macro_rules! $macro {
-            // Check that the tt appears in at least one of the #[variant(...)] attributes
-            $($((@[$sub]filter $d ($d t:tt)*) => {$d ($d t)*};)+)+
-            (@[$d t:tt]filter $d ($d _:tt)*) => {
-                ::core::compile_error!(concat!("Unknow substutition `", stringify!($d t), "`"));
+            // Same as: $sub $(| $_:tt)* : { $($t:tt)* } $(, $($__:tt)|+ : { $($___:tt)* })* $(,)?
+            $(($sub $d (| $d _:tt)* : { $d ($d t:tt)* } $d (, $d ($d __:tt)|+ : { $d ($d ___:tt)* })* $d (,)?) => {
+                // Same as: $($t)*
+                $d ($d t)*
+            };)+
+            // Same as: _ $(| $_:tt)* : { $($t:tt)* } $(, $($__:tt)|+ : { $($___:tt)* })* $(,)?
+            (_ $d (| $d _:tt)* : { $d ($d t:tt)* } $d (, $d ($d __:tt)|+ : { $d ($d ___:tt)* })* $d (,)?) => {
+                // Same as: $($t)*
+                $d ($d t)*
             };
-
-            // NOTE: what is $d d?
-            // $d d, like for $d, is the dollar sign.
-            // This has to be done to achive two-level-deep nesting of macros with parameters:
-            // like for the main macro a dollar sign has to be passed in order to make sub-macros
-            // that take parameters, but in defining this dollar-sign-meta-var the main
-            // one ($d) as to be used, this $d d is the inner macro `$`
-            $(([$d d:tt] $($sub)+) => {
-                // NOTE: here $d d is the same as $
-                macro_rules! select {
-                    // Same as: $sub $(| $_:tt)* : { $($t:tt)* } $(, $($__:tt)|+ : { $($___:tt)* })* $(,)?
-                    $(($sub $d d (| $d d _:tt)* : { $d d ($d d t:tt)* } $d d (, $d d ($d d __:tt)|+ : { $d d ($d d ___:tt)* })* $d d (,)?) => {
-                        // Same as: $($t)*
-                        $d d ($d d t)*
-                    };)+
-                    // Same as: _ $(| $_:tt)* : { $($t:tt)* } $(, $($__:tt)|+ : { $($___:tt)* })* $(,)?
-                    (_ $d d (| $d d _:tt)* : { $d d ($d d t:tt)* } $d d (, $d d ($d d __:tt)|+ : { $d d ($d d ___:tt)* })* $d d (,)?) => {
-                        // Same as: $($t)*
-                        $d d ($d d t)*
-                    };
-                    // Same as: $sv:tt : { $($__:tt)* } $(, $($v:tt)|+ : { $($t:tt)* })* $(,)?
-                    ($d d sv:tt : { $d d ($d d __:tt)* } $d d (, $d d ($d d v:tt)|+ : { $d d ($d d t:tt)* })* $d d (,)?) => {
-                        // Same as: $macro!{@[$sv]filter select!{$($v $(| $va)* : { $($t)* }),*}}
-                        $macro!{@[$d d sv]filter select!{$d d ($d d ($d d v)|+ : { $d d ($d d t)* }),*}}
-                    };
-                    // Same as: $_:tt $(| $v:tt)+ : { $($t:tt)* } $(, $($ov:tt)|+ : { $($ot:tt)* })* $(,)?
-                    ($d d _:tt $d d (| $d d v:tt)+ : { $d d ($d d t:tt)* } $d d (, $d d ($d d ov:tt)|+ : { $d d ($d d ot:tt)* })* $d d (,)?) => {
-                        // Same as: select!{$($v)|+ : { $($t)* }, $($($ov)|+ : { $($ot)* }),*}
-                        select!{$d d ($d d v)|+ : { $d d ($d d t)* }, $d d ($d d ($d d ov)|+ : { $d d ($d d ot)* }),*}
-                    };
-                    // Same as: $($v)|+ : $($t:tt)*
-                    ($d d ($d d v:tt)|+ : $d d ($d d t:tt)*) => {
-                        // Same as: select!{$($v)|+ : { $($t)* }}
-                        select!{$d d ($d d v)|+ : { $d d ($d d t)* }}
-                    };
-                    () => {};
-                }
-                $macro!{@[$d d]expand $($sub)+}
-            };)*
+            // Same as: $sv:tt : { $($__:tt)* } $(, $($v:tt)|+ : { $($t:tt)* })* $(,)?
+            ($d sv:tt : { $d ($d __:tt)* } $d (, $d ($d v:tt)|+ : { $d ($d t:tt)* })* $d (,)?) => {
+                // Same as: $macro!{$($v $(| $va)* : { $($t)* }),*}
+                $macro!{$d ($d ($d v)|+ : { $d ($d t)* }),*}
+            };
+            // Same as: $_:tt $(| $v:tt)+ : { $($t:tt)* } $(, $($ov:tt)|+ : { $($ot:tt)* })* $(,)?
+            ($d _:tt $d (| $d v:tt)+ : { $d ($d t:tt)* } $d (, $d ($d ov:tt)|+ : { $d ($d ot:tt)* })* $d (,)?) => {
+                // Same as: $macro!{$($v)|+ : { $($t)* }, $($($ov)|+ : { $($ot)* }),*}
+                $macro!{$d ($d v)|+ : { $d ($d t)* }, $d ($d ($d ov)|+ : { $d ($d ot)* }),*}
+            };
+            // Same as: $($v)|+ : $($t:tt)*
+            ($d ($d v:tt)|+ : $d ($d t:tt)*) => {
+                // Same as: $macro!{$($v)|+ : { $($t)* }}
+                $macro!{$d ($d v)|+ : { $d ($d t)* }}
+            };
+            () => {};
             // NOTE: why not doing everything inside the first matcher?
             // That's because if that was done an extra variable called $d will be avaiable inside the given code
             // which is not wanted, as the only "doller-meta-variable" should be $dollar
@@ -239,6 +220,18 @@ macro_rules! variants {
             // NOTE: this catches the cases when $dollar is not defined, as the [$] is always set
             (@[$d _:tt]expand $($d $param:tt)+ $d ($d __:tt)*) => { $($i)* };
         }
-        $($macro!{[$d] $($sub)+})*
+        $macro!{@[$d]expand $($sub)+}
+
+        $crate::variants!{
+            #[dollar($d $(as $dollar)?)]
+            $(#[variant($($other_sub),+)])*
+            macro $macro($($param),+)
+            {$($i)*}
+        }
     };
+    (
+        #[dollar($d:tt $(as $dollar:ident)?)]
+        macro $macro:ident($($param:ident),+)
+        {$($i:tt)*}
+    ) => {};
 }
